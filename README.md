@@ -88,12 +88,12 @@ This database holds 7 shoes and have been inserted in the script above. Their co
 
 ## Thoughts
 ### Go
-The Go API logic is fairly simple for this challenge, but I re-structured my project a couple times trying to find a good combination of simplicity and the ability to expand in the future. I know this is a just a challenge, but I like to think of application design this way. I Design with future changes in mind. I also invested a fair amount of time researching different approaches to testing. My unit tests utilize interfaces and table driven testing.
+The Go API logic is fairly simple for this challenge, but I re-structured my project a couple times trying to find a good combination of simplicity and flexibility. I try to design applications that are not overly complex so that changes may be made. I also invested a fair amount of time researching different approaches to testing. My unit tests utilize interfaces and table driven testing.
 
 ### Postgres
 I normalized the small database I created. Rather than having shoe names repeated in each row within the truetosize table, I created the shoes table which pairs an id and name of a shoe.
 
 ### Docker 
-I would say most of my time during this challenge was invested into Docker. While I've been familiar with docker for some time, I wasn't aware of the methods to reduce image size for Go programs. I was able to get my API down to 4.88MB and I know have a much better grasp of Docker's overall feature set utility.
+I would say most of my time during this challenge was invested into Docker. While I've been familiar with docker for some time, I was not aware of the methods to reduce image size for Go programs. I was able to get my API down to 4.88MB and I now have a much better grasp of Docker's overall feature set and utility.
 
 
