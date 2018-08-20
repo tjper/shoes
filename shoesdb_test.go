@@ -1,10 +1,13 @@
-package shoes
+package main
 
 import (
+	"errors"
+	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 	"reflect"
 	"testing"
-	//	"gopkg.in/DATA-DOG/go-sqlmock.v1"
 )
+
+var ErrMock = errors.New("Mock Error")
 
 func Test_Conn(t *testing.T) {
 	db := Db()
@@ -14,59 +17,44 @@ func Test_Conn(t *testing.T) {
 	}
 }
 
-var (
-	shoeSizes = map[int][]int{
-		1: []int{1, 2, 3},
-	}
-	shoesSizes = map[int][]int{
-		1: []int{1, 2},
-		2: []int{2, 4},
-	}
-)
-
 func Test_InsertTrueToSizes(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	type test struct {
-		name            string
-		expectedErr     error
-		expectedRes     int
-		shoeTrueToSizes map[int][]int
-	}
-	tests := []test{
-		test{"Zero trueToSizes.", ErrZeroTrueToSizes, 0, map[int][]int{}},
-		test{"One shoe, three sizes.", nil, 3, shoeSizes},
-		test{"Two shoes, two sizes.", nil, 4, shoesSizes},
+	tests := []struct {
+		name        string
+		shoeId      int
+		trueToSize  int
+		expectedRes int
+		expectedErr error
+	}{
+		{"trueToSize < 1.", 1, 0, 0, ErrTrueToSizeInvalid},
+		{"trueToSize > 5.", 1, 6, 0, ErrTrueToSizeInvalid},
+		{"trueToSize valid, shoeId valid.", 1, 3, 1, nil},
+		{"trueToSize valid, shoeId DNE.", 600, 3, 0, ErrMock},
 	}
 
-	mock.ExpectExec("INSERT INTO truetosize").WithArgs(1, 1, 1, 2, 1, 3).WillReturnResult(sqlmock.NewResult(3, 3))
-	mock.ExpectExec("INSERT INTO truetosize").WithArgs(1, 1, 1, 2, 2, 2, 2, 4).WillReturnResult(sqlmock.NewResult(4, 4))
+	mock.ExpectExec("INSERT INTO truetosize").WithArgs(1, 3).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("INSERT INTO truetosize").WithArgs(600, 3).WillReturnError(ErrMock)
 
-	for _, te := range tests {
-		t.Run(te.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			c := DbClient{Db: db}
-			res, err := c.InsertTrueToSizes(te.shoeTrueToSizes)
-			if res != te.expectedRes {
-				t.Errorf("Expected Result = %v, Actual Result = %v\n", te.expectedRes, res)
+			res, err := c.InsertTrueToSize(test.shoeId, test.trueToSize)
+			if res != test.expectedRes {
+				t.Errorf("Expected Result = %v, Actual Result = %v\n", test.expectedRes, res)
 			}
-			if err != te.expectedErr {
-				t.Errorf("Expected Error = %v, Actual Error = %v\n", te.expectedErr, err)
+			if err != test.expectedErr {
+				t.Errorf("Expected Error = %v, Actual Error = %v\n", test.expectedErr, err)
 			}
 		})
 	}
-
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)
 	}
 }
-
-var (
-	oneShoe  = []int{1}
-	twoShoes = []int{1, 2}
-)
 
 func Test_SelectTrueToSize(t *testing.T) {
 	db, mock, err := sqlmock.New()
@@ -74,53 +62,35 @@ func Test_SelectTrueToSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	type test struct {
+	tests := []struct {
 		name        string
-		expectedRes map[int][]int
+		shoeId      int
+		expectedRes []int
 		expectedErr error
-		shoesIds    []int
-	}
-	tests := []test{
-		test{"Zero shoes.", map[int][]int{}, ErrZeroShoesIds, []int{}},
-		test{"One shoe.", shoeSizes, nil, oneShoe},
-		test{"Two shoes.", shoesSizes, nil, twoShoes},
+	}{
+		{"Valid shoeId", 1, []int{1, 2, 3}, nil},
+		{"Invalid shoeId", -1, []int{}, nil},
 	}
 
-	rows := sqlmock.NewRows([]string{"shoes_id", "truetosize"}).AddRow(1, 1).AddRow(1, 2).AddRow(1, 3)
-	mock.ExpectQuery(`SELECT shoes_id, truetosize FROM truetosize`).WithArgs(1).WillReturnRows(rows)
+	rows := sqlmock.NewRows([]string{"truetosize"}).AddRow(1).AddRow(2).AddRow(3)
+	mock.ExpectQuery(`SELECT truetosize FROM truetosize`).WithArgs(1).WillReturnRows(rows)
 
-	rows = sqlmock.NewRows([]string{"shoes_id", "truetosize"}).AddRow(1, 1).AddRow(1, 2).AddRow(2, 2).AddRow(2, 4)
-	mock.ExpectQuery(`SELECT shoes_id, truetosize FROM truetosize`).WithArgs(1, 2).WillReturnRows(rows)
+	rows = sqlmock.NewRows([]string{"truetosize"})
+	mock.ExpectQuery(`SELECT truetosize FROM truetosize`).WithArgs(-1).WillReturnRows(rows)
 
-	for _, te := range tests {
-		t.Run(te.name, func(t *testing.T) {
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			c := DbClient{Db: db}
-			res, err := c.SelectTrueToSizeByShoesId(te.shoesIds)
-			if err != te.expectedErr {
-				t.Errorf("Expected Error = %v, Actual Error = %v\n", te.expectedErr, err)
-				t.SkipNow()
+			res, err := c.SelectTrueToSizeByShoeId(test.shoeId)
+			if err != test.expectedErr {
+				t.Errorf("Expected Error = %v, Actual Error = %v\n", test.expectedErr, err)
 			}
-			if !mapsEqual(res, te.expectedRes) {
-				t.Errorf("Expected Res = %v, Actual Res = %v\n", te.expectedRes, res)
+			if !reflect.DeepEqual(test.expectedRes, res) {
+				t.Errorf("Expected Res = %v, Actual Res = %v\n", test.expectedRes, res)
 			}
 		})
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Error(err)
 	}
-}
-
-func mapsEqual(m, s map[int][]int) bool {
-	for id, sizes := range m {
-		sizes2, exists := s[id]
-		if !exists {
-			return false
-		}
-		for i, size := range sizes {
-			if size != sizes2[i] {
-				return false
-			}
-		}
-	}
-	return true
 }

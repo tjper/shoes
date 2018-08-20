@@ -1,0 +1,23 @@
+# Step 1 build executable binary
+FROM golang:alpine as builder
+
+COPY . $GOPATH/src/github.com/tjper/shoes/
+WORKDIR $GOPATH/src/github.com/tjper/shoes/
+
+# go get dependencies
+RUN apk add --no-cache git mercurial \ 
+    && go get github.com/lib/pq \
+    && apk del git mercurial 
+
+#build binary
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o /go/bin/shoes
+
+# Step 2 build a small image
+FROM scratch
+
+WORKDIR /log
+
+COPY --from=builder /go/bin/shoes /go/bin/shoes
+
+ENTRYPOINT ["/go/bin/shoes"]
+EXPOSE 8080

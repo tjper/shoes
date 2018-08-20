@@ -1,24 +1,22 @@
-// Package shoes provides a library for interacting with the shoes Postgres database.
-package shoes
+package main
 
 import (
 	"database/sql"
 	"errors"
-	"strings"
 
 	_ "github.com/lib/pq"
 )
 
 // Error codes returned by failures within library.
 var (
-	ErrZeroTrueToSizes = errors.New("Zero truetosizes passed to InsertTrueToSizes.")
-	ErrZeroShoesIds    = errors.New("Zero shoes_ids passed to SelectTrueToSizeByShoesId.")
+	ErrTrueToSizeInvalid = errors.New("TrueToSize needs to be <= 5 && >= 1.")
+	ErrZeroShoesIds      = errors.New("Zero shoes_ids passed to SelectTrueToSizeByShoesId.")
 )
 
 // Conn establishes a connection with the shoes db, if successful,
 // returns db connection.
 func Db() *sql.DB {
-	connStr := "user=shoes dbname=shoes sslmode=verify-full"
+	connStr := "dbname=shoes user=shoes host=shoesdb sslmode=disable"
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		LogErr.Fatalln(err)
@@ -34,29 +32,17 @@ type DbClient struct {
 	}
 }
 
-// InsertTrueToSize inserts shoeId and truetosize sets into DbClient.Db, if successful,
+// InsertTrueToSize inserts shoeId and truetosize into DbClient.Db, if successful,
 // returns the number of sets inserted.
-func (c DbClient) InsertTrueToSizes(shoeTrueToSizes map[int][]int) (int, error) {
-	if len(shoeTrueToSizes) == 0 {
-		LogErr.Println(ErrZeroTrueToSizes)
-		return 0, ErrZeroTrueToSizes
+func (c DbClient) InsertTrueToSize(shoeId, trueToSize int) (int, error) {
+	if trueToSize < 1 || trueToSize > 5 {
+		LogErr.Println(ErrTrueToSizeInvalid)
+		return 0, ErrTrueToSizeInvalid
 	}
 
-	// generate query string and arguements
-	query := "INSERT INTO truetosize (shoes_id, truetosize) VALUES "
-	values := make([]string, 0)
-	args := make([]interface{}, 0)
+	query := "INSERT INTO truetosize (shoes_id, truetosize) VALUES ($1, $2);"
 
-	for shoe, tts := range shoeTrueToSizes {
-		for _, v := range tts {
-			values = append(values, "(?, ?)")
-			args = append(args, shoe, v)
-		}
-	}
-
-	query += strings.Join(values, ",") + ";"
-
-	res, err := c.Db.Exec(query, args...)
+	res, err := c.Db.Exec(query, shoeId, trueToSize)
 	if err != nil {
 		LogErr.Println(err)
 		return 0, err
@@ -70,40 +56,29 @@ func (c DbClient) InsertTrueToSizes(shoeTrueToSizes map[int][]int) (int, error) 
 	return int(aff), nil
 }
 
-// SelectTrueToSizeByShoesId retrieves shoeId and truetosize sets from DbClient.Db, if successful,
-// returns the sets.
-func (c DbClient) SelectTrueToSizeByShoesId(shoesIds []int) (map[int][]int, error) {
-	if len(shoesIds) == 0 {
-		return nil, ErrZeroShoesIds
-	}
+// SelectTrueToSizeByShoeId retrieves truetosize set by shoeId from DbClient.Db, if successful,
+// returns the set.
+func (c DbClient) SelectTrueToSizeByShoeId(shoeId int) ([]int, error) {
 
-	query := `SELECT shoes_id, truetosize
+	query := `SELECT truetosize
 		  FROM truetosize 
-		  WHERE shoes_id IN (`
-	values := make([]string, 0)
-	args := make([]interface{}, 0)
-	for _, id := range shoesIds {
-		values = append(values, "?")
-		args = append(args, id)
-	}
+		  WHERE shoes_id = $1`
 
-	query += strings.Join(values, ", ") + ");"
-
-	rows, err := c.Db.Query(query, args...)
+	rows, err := c.Db.Query(query, shoeId)
 	if err != nil {
 		LogErr.Println(err)
 		return nil, err
 	}
 	defer rows.Close()
 
-	res := make(map[int][]int)
+	res := make([]int, 0)
 	for rows.Next() {
-		var shoes_id, truetosize int
-		if err := rows.Scan(&shoes_id, &truetosize); err != nil {
+		var tts int
+		if err := rows.Scan(&tts); err != nil {
 			LogErr.Println(err)
 			return nil, err
 		}
-		res[shoes_id] = append(res[shoes_id], truetosize)
+		res = append(res, tts)
 	}
 	if err := rows.Err(); err != nil {
 		LogErr.Println(err)
