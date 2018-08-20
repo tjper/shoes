@@ -1,4 +1,4 @@
-tockx programming challenge.
+# Stockx programming challenge.
 
 ## Objective
 
